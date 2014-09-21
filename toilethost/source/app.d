@@ -13,6 +13,7 @@ shared string log = null;
 
 void append_to_log(in char[] payload)
 {
+//	debug writeln(payload);
 	if (log is null || log.length > 16384)
 		log = payload.idup;//TODO: truncate
 	else
@@ -20,6 +21,7 @@ void append_to_log(in char[] payload)
 }
 
 shared Address lastSender;
+shared Socket[] streamClients;
 
 void payloadhandler_udp()
 {
@@ -44,22 +46,25 @@ void payloadhandler_udp()
     }
 }
 
-float raw2temp(long raw)
-{
-	return raw / 7.8f - 4;
-}
 
 void receive_payload(in char[] packet, Address sender)
 {
 	//debug writeln(packet);
 	lastSender = cast(shared)sender;
 	auto json = parseJSON(packet);
-	json.object["C"] = raw2temp(json["heat0"].integer);
 	json.object["from"] = sender.toString();
 	import std.datetime;
 	json.object["at"] = Clock.currTime.toISOExtString();
-	append_to_log(json.toString());
-//	debug writeln(json);
+	string str = json.toString();
+	append_to_log(str);
+
+	shared(Socket)[] newClients;
+	foreach (c; streamClients)
+		if ((cast(Socket)c).send(str) == str.length)
+			newClients ~= c;
+		else
+			(cast(Socket)c).close();
+	streamClients = newClients;
 }
 
 
@@ -90,7 +95,7 @@ void payloadhandler_tcp()
 void handle_http_client(shared Socket c)
 {
 	auto client = cast(Socket)c;
-	scope(exit) client.close();
+	scope(exit) if (client) client.close();
 
 	char[MAX_PACKET_SIZE] packet = void;
 	char[] all;
@@ -113,7 +118,7 @@ Lreceive:
 	    	}
 	}
 
-	scope(exit) client.shutdown(SocketShutdown.BOTH);
+	scope(exit) if (client) client.shutdown(SocketShutdown.BOTH);
 
     enum HEADERS =
     		"HTTP/1.1 200 OK\r\n"
@@ -140,6 +145,13 @@ Lreceive:
     	auto sock = new UdpSocket(AddressFamily.INET);
     	sock.sendTo("toggle", cast(Address)lastSender);
 		client.send(HEADERS ~ "OK");
+	}
+	else if (all[0..19] == "GET /stream HTTP/1.")
+	{
+		client.setOption(SocketOptionLevel.TCP, SocketOption.TCP_NODELAY, 1);
+		client.send(HEADERS);
+		streamClients = cast(shared)(streamClients ~ c);
+		client = null;
 	}
 	else
 	{

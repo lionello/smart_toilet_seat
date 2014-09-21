@@ -3,31 +3,128 @@
 <script src="http://lunesu.com/Chart.min.js"></script>
 <script type="text/javascript">
 
-window.load = function()
+var myNewChart;
+
+function updateChart(rawdata)
 {
 	var data = {
-	    labels: ["January", "February", "March", "April", "May", "June", "July"],
+	    labels: [],
 	    datasets: [
 	        {
-	            label: "My First dataset",
+	            label: "Gas",
+	            fillColor: "rgba(220,220,0,0.2)",
+	            strokeColor: "rgba(220,220,0,1)",
+	            pointColor: "rgba(220,220,0,1)",
+	            pointStrokeColor: "#fff",
+	            pointHighlightFill: "#fff",
+	            pointHighlightStroke: "rgba(220,220,0,1)",
+	            data: []
+	        },
+	        {
+	            label: "Seat",
+	            fillColor: "rgba(0,220,220,0.2)",
+	            strokeColor: "rgba(0,220,220,1)",
+	            pointColor: "rgba(0,220,220,1)",
+	            pointStrokeColor: "#fff",
+	            pointHighlightFill: "#fff",
+	            pointHighlightStroke: "rgba(0,220,220,1)",
+	            data: []
+	        },
+	        {
+	            label: "Celcius",
 	            fillColor: "rgba(220,220,220,0.2)",
 	            strokeColor: "rgba(220,220,220,1)",
 	            pointColor: "rgba(220,220,220,1)",
 	            pointStrokeColor: "#fff",
 	            pointHighlightFill: "#fff",
 	            pointHighlightStroke: "rgba(220,220,220,1)",
-	            data: [65, 59, 80, 81, 56, 55, 40]
+	            data: []
 	        }
 	    ]
 	};
-	var ctx = document.getElementById("myChart").getContext("2d");
-	var myNewChart = new Chart(ctx).Line(data);
+	for (i=1; i<rawdata.length;i+=1)
+	{
+		data.labels.push(rawdata[i].at);
+		data.datasets[0].data.push(rawdata[i].gas / 10);
+		data.datasets[1].data.push(rawdata[i].seat * 10);
+		data.datasets[2].data.push(rawdata[i].C);
+	}
+
+	var ctx = myChart.getContext("2d");
+	myNewChart = new Chart(ctx).Line(data);
+
+	//refreshData
 }
+
+function refreshData()
+{
+	var xhr = new XMLHttpRequest;
+	xhr.open("GET", "http://pizzapazzi.com:8888/json", true);
+	xhr.onreadystatechange = function(rs)
+	{
+		if (xhr.readyState == 4)
+		{
+			updateChart(JSON.parse(xhr.responseText));
+		}
+	};
+	xhr.send();
+}
+
+function resize()
+{
+    var myChart = document.getElementById("myChart");
+    myChart.height = window.innerHeight - 20;//-button
+    myChart.width = window.innerWidth;
+}
+
+window.onresize = function()
+{
+	resize();
+};
+
+window.onload = function()
+{
+	resize();
+
+	refreshData();
+
+    var onoff = document.getElementById("onoff");
+    onoff.onclick = function()
+    {
+		var xhr = new XMLHttpRequest;
+		xhr.open("GET", "http://pizzapazzi.com:8888/toggle", true);
+		xhr.send();
+    };
+
+    var lastlen=0;
+	var xhr = new XMLHttpRequest;
+	xhr.open("GET", "http://pizzapazzi.com:8888/stream", true);
+	xhr.onreadystatechange = function(rs)
+	{
+		if (xhr.readyState == 3)
+		{
+			var s = xhr.responseText.substring(lastlen);
+			while (1)
+			{
+				var w = s.indexOf('}');
+				if (w++<=0)
+					break;
+				var j = JSON.parse(s.substring(0, w));
+				s = s.substring(w);
+				lastlen += w;
+				myNewChart.addData([j.gas/10, j.seat*10, j.C], j.at);
+				myNewChart.removeData();
+			}
+		}
+	};
+	xhr.send();
+};
 
 </script>
 <title>Smart Toilet&tm;</title>
 </head>
 <body>
+<button id="onoff">Toggle heater</button>
 <canvas id="myChart" width="400" height="400"></canvas>
 </body>
 </html>

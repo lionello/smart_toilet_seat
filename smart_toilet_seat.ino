@@ -10,7 +10,7 @@
 #define SEAT_SENSOR 3
 #define TEMP_0_PIN A1
 #define GAS_SENSOR A2
-#define TEMP_TARGET 200
+#define TEMP_TARGET 36
 
 #define WLAN_SSID       "Hero_Center"           // cannot be longer than 32 characters!
 #define WLAN_PASS       "homeforstartups"
@@ -523,19 +523,22 @@ void setup(void)
     delay(500);
   }
   
-#if 1
+
   host = cc3000.connectUDP(destIP, 5417);
-#else
-  host = cc3000.connectTCP(destIP, 5417);
+/*  host = cc3000.connectTCP(destIP, 5417);
   if (host.connected())  
     DEBUGLN("Connected...");
   else
     DEBUGLN("NOT Connected...");
-#endif
+*/
 
 #endif
 }
 
+short raw2deg(short raw)
+{
+  return (raw - 31) / 8;//float
+}
 
 void loop() 
 {
@@ -548,23 +551,24 @@ void loop()
   rawavg = (rawavg + rawtemp + 1) >> 1;
   DEBUGLN(rawavg);
 
+  short C = raw2deg(rawavg);
   static boolean heating = false;
   if (heating)
   {
-    if (rawavg > TEMP_TARGET) {
+    if (C > TEMP_TARGET) {
       WRITE(HEATER_0_PIN, 0);
       heating = false;
     }
   }
   else
   {
-    if (rawavg < TEMP_TARGET) {
+    if (C < TEMP_TARGET) {
       WRITE(HEATER_0_PIN, 1);
       heating = true;
     }
   }
 
-  String json = "{\"wc\":\"hackathon\",\"heat0\":"+String(rawavg)+",\"gas\":" + String(gasSensorValue) + ",\"seat\":" + String(seatSensorValue) + "}\r\n";  
+  String json = "{\"wc\":\"hackathon\",\"C\":"+String(C)+",\"gas\":" + String(gasSensorValue) + ",\"seat\":" + String(seatSensorValue) + "}\r\n";  
   host.fastrprint(json.c_str());
 
   // picture loop
