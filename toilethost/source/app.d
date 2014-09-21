@@ -99,14 +99,16 @@ Lreceive:
 	while(1)
 	{
 	    const len = client.receive(packet);
-	    if (len <= 0)
+	    if (len == 0)
 	    	break;
+	    else if (len < 0)
+	    	return;
 	    all ~= packet;
 	    for (int p=0; p<all.length-3; ++p)
 	    	if (all[p..p+4] == "\r\n\r\n")
 	    	{
 	    		//got headers
-				//client.shutdown(SocketShutdown.RECEIVE);
+				client.shutdown(SocketShutdown.RECEIVE);
 	    		break Lreceive;
 	    	}
 	}
@@ -116,26 +118,32 @@ Lreceive:
     enum HEADERS =
     		"HTTP/1.1 200 OK\r\n"
 			"Connection: close\r\n"
+			"Cache-Control: no-cache\r\n"
+			"Pragma: no-cache\r\n"
 			"Content-Type: application/json\r\n"
 			"Access-Control-Allow-Origin: *\r\n"
-			"Access-Control-Allow-Method: GET\r\n"
+			"Access-Control-Allow-Method: GET,OPTIONS\r\n"
 	        "Access-Control-Allow-Headers: cache-control,x-date,authorization,content-type\r\n\r\n";
 
-	if (all[0..10] == "GET /json ")
+    if (all[0..9] == "OPTIONS /")
+    {
+		client.send(HEADERS);
+    }
+	else if (all[0..17] == "GET /json HTTP/1.")
 	{
-		client.send(HEADERS ~ `[version":1},`);
+		client.send(HEADERS ~ `[{"version":1},`);
 		client.send(log);
 		client.send(`]`);
 	}
-	else if (all[0..12] == "GET /toggle ")
+	else if (all[0..19] == "GET /toggle HTTP/1.")
 	{
     	auto sock = new UdpSocket(AddressFamily.INET);
     	sock.sendTo("toggle", cast(Address)lastSender);
-		client.send(HEADERS);
+		client.send(HEADERS ~ "OK");
 	}
 	else
 	{
-		client.send(`HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\nNot Found.`);
+		client.send("HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\nNot Found.");
 	}
 }
 
@@ -155,8 +163,7 @@ void main()
     {
     	auto client = sock.accept();
     	debug writeln("HTTP client connected from ", client.remoteAddress);
-    	handle_http_client(cast(shared)client);
-    	//spawn(&handle_http_client, cast(shared)client);
+    	spawn(&handle_http_client, cast(shared)client);
     }
 }
 
